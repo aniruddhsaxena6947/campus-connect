@@ -176,6 +176,32 @@ function canPublishCampusContent(role: UserRole): boolean {
 
 async function createServer() {
   const app = express();
+
+  // Allow requests from Capacitor Android/iOS app origins + web
+  app.use((req: Request, res: Response, next: NextFunction) => {
+    const allowedOrigins = [
+      'capacitor://localhost',
+      'http://localhost',
+      'http://localhost:3000',
+      'http://localhost:5173',
+      'ionic://localhost',
+      'https://campus-connect-jqob.onrender.com',
+    ];
+    const origin = req.headers.origin as string | undefined;
+    if (!origin || allowedOrigins.includes(origin)) {
+      res.setHeader('Access-Control-Allow-Origin', origin || '*');
+    } else {
+      res.setHeader('Access-Control-Allow-Origin', '*');
+    }
+    res.setHeader('Access-Control-Allow-Methods', 'GET,POST,PUT,PATCH,DELETE,OPTIONS');
+    res.setHeader('Access-Control-Allow-Headers', 'Content-Type,Authorization');
+    if (req.method === 'OPTIONS') {
+      res.sendStatus(204);
+      return;
+    }
+    next();
+  });
+
   app.use(express.json({ limit: '256kb' }));
 
   const router = express.Router();
