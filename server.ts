@@ -181,6 +181,7 @@ async function createServer() {
   app.use((req: Request, res: Response, next: NextFunction) => {
     const allowedOrigins = [
       'capacitor://localhost',
+      'https://localhost',       // androidScheme: 'https' in capacitor.config.ts
       'http://localhost',
       'http://localhost:3000',
       'http://localhost:5173',
