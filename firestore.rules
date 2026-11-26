@@ -1,0 +1,836 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    // Pillar 4.1: Global Safety Net (Default Deny)
+    match /{document=**} {
+      allow read, write: if false;
+    }
+
+    // -------------------------------------------------------------------------
+    // Phase 3: Hardened Global Helpers
+    // -------------------------------------------------------------------------
+    function isValidId(id) {
+      return id is string && id.size() >= 1 && id.size() <= 128 && id.matches('^[a-zA-Z0-9_-]+$');
+    }
+
+    function isValidShortId(id) {
+      return id is string && id.size() >= 1 && id.size() <= 64 && id.matches('^[a-zA-Z0-9_-]+$');
+    }
+
+    function incoming() {
+      return request.resource.data;
+    }
+
+    function existing() {
+      return resource.data;
+    }
+
+    function isSignedIn() {
+      return request.auth != null;
+    }
+
+    function isVerified() {
+      return isSignedIn() && request.auth.token.email_verified == true;
+    }
+
+    function isOwner(userId) {
+      return isSignedIn() && request.auth.uid == userId;
+    }
+
+    function isBootstrappedAdmin() {
+      return isVerified() &&
+        ('email' in request.auth.token) &&
+        request.auth.token.email.lower() == 'aniruddhsaxena73@gmail.com';
+    }
+
+    function isAdmin() {
+      return isVerified() && (
+        isBootstrappedAdmin() ||
+        exists(/databases/$(database)/documents/admins/$(request.auth.uid))
+      );
+    }
+
+    function hasVerifiedPublicProfile() {
+      return exists(/databases/$(database)/documents/users/$(request.auth.uid)/public/profile);
+    }
+
+    function callerRole() {
+      return get(/databases/$(database)/documents/users/$(request.auth.uid)/public/profile).data.role;
+    }
+
+    function isPublisher() {
+      return isAdmin() || (
+        isVerified() &&
+        hasVerifiedPublicProfile() &&
+        callerRole() in ['faculty', 'club_incharge', 'hub_incharge', 'super_admin']
+      );
+    }
+
+    function isDirectApprover() {
+      return isAdmin() || (
+        isVerified() &&
+        hasVerifiedPublicProfile() &&
+        callerRole() in ['hub_incharge', 'super_admin']
+      );
+    }
+
+    function callerEmailInviteId() {
+      return hashing.sha256(request.auth.token.email.lower()).toHexString().lower();
+    }
+
+    function hasMatchingRoleInvite(targetRole, targetHubId, targetClubId) {
+      return ('email' in request.auth.token) &&
+        exists(/databases/$(database)/documents/roleInvites/$(callerEmailInviteId())) &&
+        get(/databases/$(database)/documents/roleInvites/$(callerEmailInviteId())).data.email == request.auth.token.email.lower() &&
+        get(/databases/$(database)/documents/roleInvites/$(callerEmailInviteId())).data.role == targetRole &&
+        get(/databases/$(database)/documents/roleInvites/$(callerEmailInviteId())).data.assignedHubId == targetHubId &&
+        get(/databases/$(database)/documents/roleInvites/$(callerEmailInviteId())).data.assignedClubId == targetClubId &&
+        !existsAfter(/databases/$(database)/documents/roleInvites/$(callerEmailInviteId()));
+    }
+
+    function hasMatchingAdminInvite(expectedInvitedByUid) {
+      return ('email' in request.auth.token) &&
+        exists(/databases/$(database)/documents/roleInvites/$(callerEmailInviteId())) &&
+        get(/databases/$(database)/documents/roleInvites/$(callerEmailInviteId())).data.email == request.auth.token.email.lower() &&
+        get(/databases/$(database)/documents/roleInvites/$(callerEmailInviteId())).data.role == 'super_admin' &&
+        get(/databases/$(database)/documents/roleInvites/$(callerEmailInviteId())).data.invitedByUid == expectedInvitedByUid &&
+        !existsAfter(/databases/$(database)/documents/roleInvites/$(callerEmailInviteId()));
+    }
+
+    // -------------------------------------------------------------------------
+    // Pillar 2: Entity Validation Blueprints (strict keys, bounds, regexes)
+    // -------------------------------------------------------------------------
+    function isValidPublicProfile(data) {
+      return data.keys().hasAll([
+        'uid', 'name', 'program', 'year', 'role', 'assignedHubId', 'createdAt', 'updatedAt'
+      ]) &&
+      data.keys().hasOnly([
+        'uid', 'name', 'program', 'year', 'role', 'assignedHubId', 'assignedClubId', 'createdAt', 'updatedAt'
+      ]) &&
+      isValidId(data.uid) &&
+      data.name is string && data.name.size() >= 2 && data.name.size() <= 80 &&
+      data.program is string && data.program.size() >= 1 && data.program.size() <= 60 &&
+      data.year is string && data.year.size() >= 1 && data.year.size() <= 40 &&
+      data.role in ['student', 'faculty', 'club_incharge', 'hub_incharge', 'super_admin'] &&
+      isValidShortId(data.assignedHubId) &&
+      (!('assignedClubId' in data) || isValidShortId(data.assignedClubId)) &&
+      data.createdAt is timestamp &&
+      data.updatedAt is timestamp;
+    }
+
+    function isValidPrivateInfo(data) {
+      return data.keys().hasAll(['uid', 'email', 'studentId', 'createdAt', 'updatedAt']) &&
+        data.keys().hasOnly(['uid', 'email', 'studentId', 'createdAt', 'updatedAt']) &&
+        isValidId(data.uid) &&
+        data.email is string && data.email.size() >= 3 && data.email.size() <= 160 &&
+        data.studentId is string && data.studentId.size() >= 2 && data.studentId.size() <= 40 &&
+        data.createdAt is timestamp &&
+        data.updatedAt is timestamp;
+    }
+
+    function isValidAdminRecord(data) {
+      return data.keys().hasAll(['uid', 'grantedByUid', 'createdAt']) &&
+        data.keys().hasOnly(['uid', 'grantedByUid', 'createdAt']) &&
+        isValidId(data.uid) &&
+        isValidId(data.grantedByUid) &&
+        data.createdAt is timestamp;
+    }
+
+    function isValidUserDirectoryEntry(data) {
+      return data.keys().hasAll([
+        'uid', 'name', 'email', 'studentId', 'program', 'year', 'role', 'assignedHubId', 'assignedClubId', 'createdAt', 'updatedAt'
+      ]) &&
+      data.keys().hasOnly([
+        'uid', 'name', 'email', 'studentId', 'program', 'year', 'role', 'assignedHubId', 'assignedClubId', 'createdAt', 'updatedAt'
+      ]) &&
+      isValidId(data.uid) &&
+      data.name is string && data.name.size() >= 2 && data.name.size() <= 80 &&
+      data.email is string && data.email.size() >= 3 && data.email.size() <= 160 &&
+      data.studentId is string && data.studentId.size() >= 2 && data.studentId.size() <= 40 &&
+      data.program is string && data.program.size() >= 1 && data.program.size() <= 60 &&
+      data.year is string && data.year.size() >= 1 && data.year.size() <= 40 &&
+      data.role in ['student', 'faculty', 'club_incharge', 'hub_incharge', 'super_admin'] &&
+      isValidShortId(data.assignedHubId) &&
+      isValidShortId(data.assignedClubId) &&
+      data.createdAt is timestamp &&
+      data.updatedAt is timestamp;
+    }
+
+    function isValidEmailDirectoryEntry(data) {
+      return data.keys().hasAll(['uid', 'createdAt', 'updatedAt']) &&
+        data.keys().hasOnly(['uid', 'createdAt', 'updatedAt']) &&
+        isValidId(data.uid) &&
+        data.createdAt is timestamp &&
+        data.updatedAt is timestamp;
+    }
+
+    function isValidRoleInvite(data) {
+      return data.keys().hasAll([
+        'id', 'email', 'role', 'assignedHubId', 'assignedClubId', 'note', 'invitedByUid', 'createdAt', 'updatedAt'
+      ]) &&
+      data.keys().hasOnly([
+        'id', 'email', 'role', 'assignedHubId', 'assignedClubId', 'note', 'invitedByUid', 'createdAt', 'updatedAt'
+      ]) &&
+      isValidId(data.id) &&
+      data.email is string && data.email.size() >= 3 && data.email.size() <= 160 &&
+      data.role in ['student', 'faculty', 'club_incharge', 'hub_incharge', 'super_admin'] &&
+      isValidShortId(data.assignedHubId) &&
+      isValidShortId(data.assignedClubId) &&
+      data.note is string && data.note.size() <= 120 &&
+      isValidId(data.invitedByUid) &&
+      data.createdAt is timestamp &&
+      data.updatedAt is timestamp;
+    }
+
+    function isValidHub(data) {
+      return data.keys().hasAll([
+        'id', 'name', 'focus', 'inChargeName', 'building', 'activeEventsCount', 'visibility', 'createdAt', 'updatedAt'
+      ]) &&
+      data.keys().hasOnly([
+        'id', 'name', 'focus', 'inChargeName', 'building', 'activeEventsCount', 'visibility', 'createdAt', 'updatedAt'
+      ]) &&
+      isValidShortId(data.id) &&
+      data.name is string && data.name.size() >= 2 && data.name.size() <= 100 &&
+      data.focus is string && data.focus.size() >= 4 && data.focus.size() <= 240 &&
+      data.inChargeName is string && data.inChargeName.size() >= 2 && data.inChargeName.size() <= 80 &&
+      data.building is string && data.building.size() >= 1 && data.building.size() <= 100 &&
+      data.activeEventsCount is int && data.activeEventsCount >= 0 &&
+      data.visibility == 'campus' &&
+      data.createdAt is timestamp &&
+      data.updatedAt is timestamp;
+    }
+
+    function isValidClub(data) {
+      return data.keys().hasAll([
+        'id', 'name', 'hubId', 'hubName', 'tagline', 'meetingSchedule', 'location', 'memberCount', 'leadName', 'visibility', 'createdAt', 'updatedAt'
+      ]) &&
+      data.keys().hasOnly([
+        'id', 'name', 'hubId', 'hubName', 'tagline', 'meetingSchedule', 'location', 'memberCount', 'leadName', 'visibility', 'createdAt', 'updatedAt'
+      ]) &&
+      isValidShortId(data.id) &&
+      data.name is string && data.name.size() >= 2 && data.name.size() <= 100 &&
+      isValidShortId(data.hubId) &&
+      data.hubName is string && data.hubName.size() >= 2 && data.hubName.size() <= 100 &&
+      data.tagline is string && data.tagline.size() >= 4 && data.tagline.size() <= 240 &&
+      data.meetingSchedule is string && data.meetingSchedule.size() >= 2 && data.meetingSchedule.size() <= 80 &&
+      data.location is string && data.location.size() >= 1 && data.location.size() <= 100 &&
+      data.memberCount is int && data.memberCount >= 0 &&
+      data.leadName is string && data.leadName.size() >= 2 && data.leadName.size() <= 80 &&
+      data.visibility == 'campus' &&
+      data.createdAt is timestamp &&
+      data.updatedAt is timestamp;
+    }
+
+    function isValidEvent(data) {
+      return data.keys().hasAll([
+        'id', 'title', 'category', 'date', 'dateDisplay', 'time', 'venue', 'entryLabel',
+        'isFree', 'description', 'highlights', 'hubId', 'hubName', 'organizerName',
+        'authorUid', 'authorRole', 'status', 'artwork', 'attendeeCount', 'capacity',
+        'createdAt', 'updatedAt'
+      ]) &&
+      data.keys().hasOnly([
+        'id', 'title', 'category', 'date', 'dateDisplay', 'time', 'venue', 'entryLabel',
+        'isFree', 'description', 'highlights', 'hubId', 'hubName', 'organizerName',
+        'authorUid', 'authorRole', 'status', 'artwork', 'featured', 'noteTag',
+        'attendeeCount', 'capacity', 'createdAt', 'updatedAt'
+      ]) &&
+      isValidShortId(data.id) &&
+      data.title is string && data.title.size() >= 3 && data.title.size() <= 120 &&
+      data.category in ['Cultural', 'Tech', 'Sports', 'Workshop', 'Competition', 'Social'] &&
+      data.date is string && data.date.size() == 10 && data.date.matches('^\\d{4}-\\d{2}-\\d{2}$') &&
+      data.dateDisplay is string && data.dateDisplay.size() >= 4 && data.dateDisplay.size() <= 32 &&
+      data.time is string && data.time.size() >= 2 && data.time.size() <= 32 &&
+      data.venue is string && data.venue.size() >= 2 && data.venue.size() <= 100 &&
+      data.entryLabel is string && data.entryLabel.size() >= 2 && data.entryLabel.size() <= 40 &&
+      data.isFree is bool &&
+      data.description is string && data.description.size() >= 8 && data.description.size() <= 1200 &&
+      data.highlights is list && data.highlights.size() >= 1 && data.highlights.size() <= 6 &&
+      data.highlights[0] is string && data.highlights[0].size() >= 1 && data.highlights[0].size() <= 40 &&
+      isValidShortId(data.hubId) &&
+      data.hubName is string && data.hubName.size() >= 2 && data.hubName.size() <= 100 &&
+      data.organizerName is string && data.organizerName.size() >= 2 && data.organizerName.size() <= 80 &&
+      isValidId(data.authorUid) &&
+      data.authorRole in ['student', 'faculty', 'club_incharge', 'hub_incharge', 'super_admin'] &&
+      data.status in ['approved', 'pending'] &&
+      data.artwork in ['music_fest', 'open_mic', 'photography', 'business_plan', 'blood_camp', 'hackathon', 'campus_general'] &&
+      (!('featured' in data) || data.featured is bool) &&
+      (!('noteTag' in data) || (data.noteTag is string && data.noteTag.size() <= 40)) &&
+      data.attendeeCount is int && data.attendeeCount >= 0 &&
+      data.capacity is int && data.capacity >= 1 && data.attendeeCount <= data.capacity &&
+      data.createdAt is timestamp &&
+      data.updatedAt is timestamp;
+    }
+
+    function isValidAnnouncement(data) {
+      return data.keys().hasAll([
+        'id', 'title', 'category', 'issuerTitle', 'authorUid', 'authorRole',
+        'summary', 'postedAt', 'date', 'pinned', 'visibility', 'createdAt', 'updatedAt'
+      ]) &&
+      data.keys().hasOnly([
+        'id', 'title', 'category', 'issuerTitle', 'authorUid', 'authorRole',
+        'summary', 'postedAt', 'date', 'pinned', 'visibility', 'createdAt', 'updatedAt'
+      ]) &&
+      isValidShortId(data.id) &&
+      data.title is string && data.title.size() >= 3 && data.title.size() <= 140 &&
+      data.category in ['Academic', 'Exam', 'Hostel', 'General'] &&
+      data.issuerTitle is string && data.issuerTitle.size() >= 2 && data.issuerTitle.size() <= 120 &&
+      isValidId(data.authorUid) &&
+      data.authorRole in ['student', 'faculty', 'club_incharge', 'hub_incharge', 'super_admin'] &&
+      data.summary is string && data.summary.size() >= 8 && data.summary.size() <= 1200 &&
+      data.postedAt is string && data.postedAt.size() >= 2 && data.postedAt.size() <= 32 &&
+      data.date is string && data.date.size() == 10 && data.date.matches('^\\d{4}-\\d{2}-\\d{2}$') &&
+      data.pinned is bool &&
+      data.visibility == 'campus' &&
+      data.createdAt is timestamp &&
+      data.updatedAt is timestamp;
+    }
+
+    function isValidRegistration(data) {
+      return data.keys().hasAll(['userId', 'eventId', 'createdAt']) &&
+        data.keys().hasOnly(['userId', 'eventId', 'createdAt']) &&
+        isValidId(data.userId) &&
+        isValidShortId(data.eventId) &&
+        data.createdAt is timestamp;
+    }
+
+    function isValidSavedRef(data) {
+      return data.keys().hasAll(['userId', 'targetId', 'createdAt']) &&
+        data.keys().hasOnly(['userId', 'targetId', 'createdAt']) &&
+        isValidId(data.userId) &&
+        isValidShortId(data.targetId) &&
+        data.createdAt is timestamp;
+    }
+
+    function isValidClubMembership(data) {
+      return data.keys().hasAll(['userId', 'clubId', 'createdAt']) &&
+        data.keys().hasOnly(['userId', 'clubId', 'createdAt']) &&
+        isValidId(data.userId) &&
+        isValidShortId(data.clubId) &&
+        data.createdAt is timestamp;
+    }
+
+    function isValidNotification(data) {
+      return data.keys().hasAll([
+        'id', 'userId', 'type', 'title', 'message', 'timeAgo', 'isRead', 'targetScreen', 'createdAt', 'updatedAt'
+      ]) &&
+      data.keys().hasOnly([
+        'id', 'userId', 'type', 'title', 'message', 'timeAgo', 'isRead', 'targetScreen', 'targetId', 'createdAt', 'updatedAt'
+      ]) &&
+      isValidShortId(data.id) &&
+      isValidId(data.userId) &&
+      data.type in ['reminder', 'announcement', 'club', 'approved', 'new_event'] &&
+      data.title is string && data.title.size() >= 2 && data.title.size() <= 100 &&
+      data.message is string && data.message.size() >= 2 && data.message.size() <= 240 &&
+      data.timeAgo is string && data.timeAgo.size() >= 1 && data.timeAgo.size() <= 32 &&
+      data.isRead is bool &&
+      data.targetScreen in ['home', 'explore', 'event_detail', 'hubs', 'announcements', 'calendar', 'saved', 'notifications', 'profile', 'settings', 'role_management'] &&
+      (!('targetId' in data) || (data.targetId is string && data.targetId.size() <= 64)) &&
+      data.createdAt is timestamp &&
+      data.updatedAt is timestamp;
+    }
+
+    // -------------------------------------------------------------------------
+    // Admins Lookup Collection
+    // -------------------------------------------------------------------------
+    match /admins/{userId} {
+      allow get: if isVerified() && isValidId(userId) && (isOwner(userId) || isAdmin());
+      allow list: if false;
+      allow create: if isVerified() &&
+        isValidId(userId) &&
+        isValidAdminRecord(incoming()) &&
+        incoming().uid == userId &&
+        incoming().createdAt == request.time &&
+        (
+          (isAdmin() && incoming().grantedByUid == request.auth.uid) ||
+          (isOwner(userId) && hasMatchingAdminInvite(incoming().grantedByUid))
+        );
+      allow update: if isVerified() &&
+        isValidId(userId) &&
+        isAdmin() &&
+        isValidAdminRecord(incoming()) &&
+        incoming().uid == existing().uid &&
+        incoming().grantedByUid == request.auth.uid &&
+        incoming().createdAt == existing().createdAt;
+      allow delete: if isVerified() &&
+        isValidId(userId) &&
+        isAdmin() &&
+        userId != request.auth.uid;
+    }
+
+    // -------------------------------------------------------------------------
+    // Campus User Directory & Email Pre-Assignments (Role Management)
+    // -------------------------------------------------------------------------
+    match /userDirectory/{userId} {
+      allow get: if isVerified() && isValidId(userId) && (isOwner(userId) || isAdmin());
+      allow list: if isVerified() && (resource.data.uid == request.auth.uid || isBootstrappedAdmin());
+      allow create: if isVerified() &&
+        isValidId(userId) &&
+        isValidUserDirectoryEntry(incoming()) &&
+        incoming().uid == userId &&
+        incoming().createdAt == request.time &&
+        incoming().updatedAt == request.time &&
+        (
+          isAdmin() ||
+          (
+            isOwner(userId) &&
+            (
+              incoming().role == 'student' ||
+              hasMatchingRoleInvite(incoming().role, incoming().assignedHubId, incoming().assignedClubId)
+            )
+          )
+        );
+      allow update: if isVerified() &&
+        isValidId(userId) &&
+        isValidUserDirectoryEntry(incoming()) &&
+        incoming().uid == existing().uid &&
+        incoming().createdAt == existing().createdAt &&
+        incoming().updatedAt == request.time &&
+        (
+          isAdmin() ||
+          (
+            isOwner(userId) &&
+            incoming().role == existing().role &&
+            incoming().assignedClubId == existing().assignedClubId &&
+            incoming().diff(existing()).affectedKeys().hasOnly([
+              'name', 'email', 'studentId', 'program', 'year', 'assignedHubId', 'updatedAt'
+            ])
+          ) ||
+          (
+            isOwner(userId) &&
+            hasMatchingRoleInvite(incoming().role, incoming().assignedHubId, incoming().assignedClubId) &&
+            incoming().diff(existing()).affectedKeys().hasOnly([
+              'role', 'assignedHubId', 'assignedClubId', 'updatedAt'
+            ])
+          )
+        );
+      allow delete: if false;
+    }
+
+    match /emailDirectory/{emailHash} {
+      allow get: if isVerified() && isValidId(emailHash) && (isAdmin() || emailHash == callerEmailInviteId());
+      allow list: if false;
+      allow create: if isVerified() &&
+        isValidId(emailHash) &&
+        isValidEmailDirectoryEntry(incoming()) &&
+        (incoming().uid == request.auth.uid || isAdmin()) &&
+        incoming().createdAt == request.time &&
+        incoming().updatedAt == request.time;
+      allow update: if isVerified() &&
+        isValidId(emailHash) &&
+        isValidEmailDirectoryEntry(incoming()) &&
+        incoming().uid == existing().uid &&
+        (incoming().uid == request.auth.uid || isAdmin()) &&
+        incoming().createdAt == existing().createdAt &&
+        incoming().updatedAt == request.time;
+      allow delete: if false;
+    }
+
+    match /roleInvites/{inviteId} {
+      allow get: if isVerified() &&
+        isValidId(inviteId) &&
+        (
+          isAdmin() ||
+          inviteId == callerEmailInviteId() ||
+          (('email' in request.auth.token) && existing().email == request.auth.token.email.lower())
+        );
+      allow list: if isVerified() &&
+        (
+          isBootstrappedAdmin() ||
+          (('email' in request.auth.token) && resource.data.email == request.auth.token.email.lower())
+        );
+      allow create: if isVerified() &&
+        isValidId(inviteId) &&
+        isAdmin() &&
+        isValidRoleInvite(incoming()) &&
+        incoming().id == inviteId &&
+        incoming().invitedByUid == request.auth.uid &&
+        incoming().createdAt == request.time &&
+        incoming().updatedAt == request.time;
+      allow update: if isVerified() &&
+        isValidId(inviteId) &&
+        isAdmin() &&
+        isValidRoleInvite(incoming()) &&
+        incoming().id == existing().id &&
+        incoming().email == existing().email &&
+        incoming().invitedByUid == request.auth.uid &&
+        incoming().createdAt == existing().createdAt &&
+        incoming().updatedAt == request.time;
+      allow delete: if isVerified() &&
+        isValidId(inviteId) &&
+        (
+          isAdmin() ||
+          (('email' in request.auth.token) && existing().email == request.auth.token.email.lower())
+        );
+    }
+
+    // -------------------------------------------------------------------------
+    // Users Split Collections (Pillar 6: PII Isolation)
+    // -------------------------------------------------------------------------
+    match /users/{userId} {
+      allow get, list, create, update, delete: if false;
+
+      match /public/profile {
+        allow get: if isVerified() && isValidId(userId) && (isOwner(userId) || isAdmin());
+        allow list: if false;
+        allow create: if isVerified() &&
+          isValidId(userId) &&
+          isValidPublicProfile(incoming()) &&
+          incoming().uid == userId &&
+          incoming().createdAt == request.time &&
+          incoming().updatedAt == request.time &&
+          (
+            isAdmin() ||
+            (
+              isOwner(userId) &&
+              (
+                incoming().role == 'student' ||
+                (
+                  ('assignedClubId' in incoming()) &&
+                  hasMatchingRoleInvite(incoming().role, incoming().assignedHubId, incoming().assignedClubId)
+                )
+              )
+            )
+          );
+        allow update: if isVerified() &&
+          isValidId(userId) &&
+          isValidPublicProfile(incoming()) &&
+          incoming().uid == existing().uid &&
+          incoming().createdAt == existing().createdAt &&
+          incoming().updatedAt == request.time &&
+          (
+            isAdmin() ||
+            (
+              isOwner(userId) &&
+              incoming().role == existing().role &&
+              incoming().diff(existing()).affectedKeys().hasOnly([
+                'name', 'program', 'year', 'assignedHubId', 'updatedAt'
+              ])
+            ) ||
+            (
+              isOwner(userId) &&
+              ('assignedClubId' in incoming()) &&
+              hasMatchingRoleInvite(incoming().role, incoming().assignedHubId, incoming().assignedClubId) &&
+              incoming().diff(existing()).affectedKeys().hasOnly([
+                'role', 'assignedHubId', 'assignedClubId', 'updatedAt'
+              ])
+            )
+          );
+        allow delete: if false;
+      }
+
+      match /private/info {
+        allow get: if isVerified() && isValidId(userId) && (isOwner(userId) || isAdmin());
+        allow list: if false;
+        allow create: if isVerified() &&
+          isValidId(userId) &&
+          isOwner(userId) &&
+          isValidPrivateInfo(incoming()) &&
+          incoming().uid == request.auth.uid &&
+          incoming().createdAt == request.time &&
+          incoming().updatedAt == request.time;
+        allow update: if isVerified() &&
+          isValidId(userId) &&
+          (isOwner(userId) || isAdmin()) &&
+          isValidPrivateInfo(incoming()) &&
+          incoming().uid == existing().uid &&
+          incoming().createdAt == existing().createdAt &&
+          incoming().updatedAt == request.time &&
+          incoming().diff(existing()).affectedKeys().hasOnly([
+            'email', 'studentId', 'updatedAt'
+          ]);
+        allow delete: if false;
+      }
+
+      // User Event Registrations (Pillar 1 Master Gate + Pillar 7 Atomicity)
+      match /registrations/{eventId} {
+        allow get: if isVerified() && isValidId(userId) && isValidShortId(eventId) && (isOwner(userId) || isAdmin());
+        allow list: if isVerified() && resource.data.userId == request.auth.uid;
+        allow create: if isVerified() &&
+          isValidId(userId) &&
+          isValidShortId(eventId) &&
+          isOwner(userId) &&
+          isValidRegistration(incoming()) &&
+          incoming().userId == request.auth.uid &&
+          incoming().eventId == eventId &&
+          incoming().createdAt == request.time &&
+          exists(/databases/$(database)/documents/events/$(eventId)) &&
+          getAfter(/databases/$(database)/documents/events/$(eventId)).data.attendeeCount ==
+            get(/databases/$(database)/documents/events/$(eventId)).data.attendeeCount + 1;
+        allow update: if false;
+        allow delete: if isVerified() &&
+          isValidId(userId) &&
+          isValidShortId(eventId) &&
+          isOwner(userId) &&
+          exists(/databases/$(database)/documents/events/$(eventId)) &&
+          getAfter(/databases/$(database)/documents/events/$(eventId)).data.attendeeCount ==
+            get(/databases/$(database)/documents/events/$(eventId)).data.attendeeCount - 1;
+      }
+
+      // User Saved Event Bookmarks
+      match /savedEvents/{eventId} {
+        allow get: if isVerified() && isValidId(userId) && isValidShortId(eventId) && isOwner(userId);
+        allow list: if isVerified() && resource.data.userId == request.auth.uid;
+        allow create: if isVerified() &&
+          isValidId(userId) &&
+          isValidShortId(eventId) &&
+          isOwner(userId) &&
+          isValidSavedRef(incoming()) &&
+          incoming().userId == request.auth.uid &&
+          incoming().targetId == eventId &&
+          incoming().createdAt == request.time &&
+          exists(/databases/$(database)/documents/events/$(eventId));
+        allow update: if false;
+        allow delete: if isVerified() && isValidId(userId) && isValidShortId(eventId) && isOwner(userId);
+      }
+
+      // User Saved Announcement Bookmarks
+      match /savedAnnouncements/{announcementId} {
+        allow get: if isVerified() && isValidId(userId) && isValidShortId(announcementId) && isOwner(userId);
+        allow list: if isVerified() && resource.data.userId == request.auth.uid;
+        allow create: if isVerified() &&
+          isValidId(userId) &&
+          isValidShortId(announcementId) &&
+          isOwner(userId) &&
+          isValidSavedRef(incoming()) &&
+          incoming().userId == request.auth.uid &&
+          incoming().targetId == announcementId &&
+          incoming().createdAt == request.time &&
+          exists(/databases/$(database)/documents/announcements/$(announcementId));
+        allow update: if false;
+        allow delete: if isVerified() && isValidId(userId) && isValidShortId(announcementId) && isOwner(userId);
+      }
+
+      // User Read Announcement Receipts
+      match /readAnnouncements/{announcementId} {
+        allow get: if isVerified() && isValidId(userId) && isValidShortId(announcementId) && isOwner(userId);
+        allow list: if isVerified() && resource.data.userId == request.auth.uid;
+        allow create: if isVerified() &&
+          isValidId(userId) &&
+          isValidShortId(announcementId) &&
+          isOwner(userId) &&
+          isValidSavedRef(incoming()) &&
+          incoming().userId == request.auth.uid &&
+          incoming().targetId == announcementId &&
+          incoming().createdAt == request.time &&
+          exists(/databases/$(database)/documents/announcements/$(announcementId));
+        allow update: if false;
+        allow delete: if isVerified() && isValidId(userId) && isValidShortId(announcementId) && isOwner(userId);
+      }
+
+      // User Club Memberships (Pillar 1 Master Gate + Pillar 7 Atomicity)
+      match /clubMemberships/{clubId} {
+        allow get: if isVerified() && isValidId(userId) && isValidShortId(clubId) && isOwner(userId);
+        allow list: if isVerified() && resource.data.userId == request.auth.uid;
+        allow create: if isVerified() &&
+          isValidId(userId) &&
+          isValidShortId(clubId) &&
+          isOwner(userId) &&
+          isValidClubMembership(incoming()) &&
+          incoming().userId == request.auth.uid &&
+          incoming().clubId == clubId &&
+          incoming().createdAt == request.time &&
+          exists(/databases/$(database)/documents/clubs/$(clubId)) &&
+          getAfter(/databases/$(database)/documents/clubs/$(clubId)).data.memberCount ==
+            get(/databases/$(database)/documents/clubs/$(clubId)).data.memberCount + 1;
+        allow update: if false;
+        allow delete: if isVerified() &&
+          isValidId(userId) &&
+          isValidShortId(clubId) &&
+          isOwner(userId) &&
+          exists(/databases/$(database)/documents/clubs/$(clubId)) &&
+          getAfter(/databases/$(database)/documents/clubs/$(clubId)).data.memberCount ==
+            get(/databases/$(database)/documents/clubs/$(clubId)).data.memberCount - 1;
+      }
+
+      // User Notifications
+      match /notifications/{notificationId} {
+        allow get: if isVerified() && isValidId(userId) && isValidShortId(notificationId) && (isOwner(userId) || isAdmin());
+        allow list: if isVerified() && resource.data.userId == request.auth.uid;
+        allow create: if isVerified() &&
+          isValidId(userId) &&
+          isValidShortId(notificationId) &&
+          (isOwner(userId) || isAdmin()) &&
+          isValidNotification(incoming()) &&
+          incoming().id == notificationId &&
+          incoming().userId == userId &&
+          incoming().createdAt == request.time &&
+          incoming().updatedAt == request.time;
+        allow update: if isVerified() &&
+          isValidId(userId) &&
+          isValidShortId(notificationId) &&
+          (isOwner(userId) || isAdmin()) &&
+          isValidNotification(incoming()) &&
+          incoming().id == existing().id &&
+          incoming().userId == existing().userId &&
+          incoming().createdAt == existing().createdAt &&
+          incoming().updatedAt == request.time &&
+          incoming().diff(existing()).affectedKeys().hasOnly(['isRead', 'updatedAt']);
+        allow delete: if isVerified() && isValidId(userId) && isValidShortId(notificationId) && (isOwner(userId) || isAdmin());
+      }
+    }
+
+    // -------------------------------------------------------------------------
+    // Campus Hubs
+    // -------------------------------------------------------------------------
+    match /hubs/{hubId} {
+      allow get: if isVerified() && isValidShortId(hubId);
+      allow list: if isVerified() && resource.data.visibility == 'campus';
+      allow create: if isVerified() &&
+        isValidShortId(hubId) &&
+        isValidHub(incoming()) &&
+        incoming().id == hubId &&
+        incoming().createdAt == request.time &&
+        incoming().updatedAt == request.time &&
+        isAdmin();
+      allow update: if isVerified() &&
+        isValidShortId(hubId) &&
+        isValidHub(incoming()) &&
+        incoming().id == existing().id &&
+        incoming().createdAt == existing().createdAt &&
+        incoming().updatedAt == request.time &&
+        isAdmin();
+      allow delete: if isVerified() && isValidShortId(hubId) && isAdmin();
+    }
+
+    // -------------------------------------------------------------------------
+    // Campus Clubs
+    // -------------------------------------------------------------------------
+    match /clubs/{clubId} {
+      allow get: if isVerified() && isValidShortId(clubId);
+      allow list: if isVerified() && resource.data.visibility == 'campus';
+      allow create: if isVerified() &&
+        isValidShortId(clubId) &&
+        isValidClub(incoming()) &&
+        incoming().id == clubId &&
+        incoming().createdAt == request.time &&
+        incoming().updatedAt == request.time &&
+        (
+          exists(/databases/$(database)/documents/hubs/$(incoming().hubId)) ||
+          existsAfter(/databases/$(database)/documents/hubs/$(incoming().hubId))
+        ) &&
+        isAdmin();
+      allow update: if isVerified() &&
+        isValidShortId(clubId) &&
+        isValidClub(incoming()) &&
+        incoming().id == existing().id &&
+        incoming().hubId == existing().hubId &&
+        incoming().createdAt == existing().createdAt &&
+        incoming().updatedAt == request.time &&
+        (
+          isAdmin() ||
+          // Action: Join / Leave atomic counter update
+          (
+            incoming().diff(existing()).affectedKeys().hasOnly(['memberCount', 'updatedAt']) &&
+            (
+              (
+                incoming().memberCount == existing().memberCount + 1 &&
+                !exists(/databases/$(database)/documents/users/$(request.auth.uid)/clubMemberships/$(clubId)) &&
+                existsAfter(/databases/$(database)/documents/users/$(request.auth.uid)/clubMemberships/$(clubId))
+              ) ||
+              (
+                incoming().memberCount == existing().memberCount - 1 &&
+                exists(/databases/$(database)/documents/users/$(request.auth.uid)/clubMemberships/$(clubId)) &&
+                !existsAfter(/databases/$(database)/documents/users/$(request.auth.uid)/clubMemberships/$(clubId))
+              )
+            )
+          )
+        );
+      allow delete: if isVerified() && isValidShortId(clubId) && isAdmin();
+    }
+
+    // -------------------------------------------------------------------------
+    // Campus Events (Pillar 4 Tiered Actions + Terminal Lock + Pillar 7 Batch)
+    // -------------------------------------------------------------------------
+    match /events/{eventId} {
+      allow get: if isVerified() &&
+        isValidShortId(eventId) &&
+        (existing().status == 'approved' || existing().authorUid == request.auth.uid || isAdmin());
+      allow list: if isVerified() &&
+        (resource.data.status == 'approved' || resource.data.authorUid == request.auth.uid || isBootstrappedAdmin());
+      allow create: if isVerified() &&
+        isValidShortId(eventId) &&
+        isValidEvent(incoming()) &&
+        incoming().id == eventId &&
+        incoming().authorUid == request.auth.uid &&
+        incoming().createdAt == request.time &&
+        incoming().updatedAt == request.time &&
+        (
+          exists(/databases/$(database)/documents/hubs/$(incoming().hubId)) ||
+          existsAfter(/databases/$(database)/documents/hubs/$(incoming().hubId))
+        ) &&
+        isPublisher() &&
+        (incoming().status == 'pending' || isDirectApprover());
+      allow update: if isVerified() &&
+        isValidShortId(eventId) &&
+        isValidEvent(incoming()) &&
+        incoming().id == existing().id &&
+        incoming().authorUid == existing().authorUid &&
+        incoming().createdAt == existing().createdAt &&
+        incoming().updatedAt == request.time &&
+        (
+          // Tier 1: Super Admin approval / moderation override
+          isAdmin() ||
+          // Action: Attendee Register / Cancel Pass (Atomic with registration subcollection)
+          (
+            existing().status == 'approved' &&
+            incoming().diff(existing()).affectedKeys().hasOnly(['attendeeCount', 'updatedAt']) &&
+            (
+              (
+                incoming().attendeeCount == existing().attendeeCount + 1 &&
+                !exists(/databases/$(database)/documents/users/$(request.auth.uid)/registrations/$(eventId)) &&
+                existsAfter(/databases/$(database)/documents/users/$(request.auth.uid)/registrations/$(eventId))
+              ) ||
+              (
+                incoming().attendeeCount == existing().attendeeCount - 1 &&
+                exists(/databases/$(database)/documents/users/$(request.auth.uid)/registrations/$(eventId)) &&
+                !existsAfter(/databases/$(database)/documents/users/$(request.auth.uid)/registrations/$(eventId))
+              )
+            )
+          ) ||
+          // Action: Author edits pending draft before terminal 'approved' state lock
+          (
+            existing().status == 'pending' &&
+            existing().authorUid == request.auth.uid &&
+            incoming().status == existing().status &&
+            incoming().diff(existing()).affectedKeys().hasOnly([
+              'title', 'description', 'venue', 'date', 'dateDisplay', 'time', 'entryLabel', 'isFree', 'updatedAt'
+            ])
+          )
+        );
+      allow delete: if isVerified() && isValidShortId(eventId) && isAdmin();
+    }
+
+    // -------------------------------------------------------------------------
+    // Official Announcements
+    // -------------------------------------------------------------------------
+    match /announcements/{announcementId} {
+      allow get: if isVerified() && isValidShortId(announcementId);
+      allow list: if isVerified() && resource.data.visibility == 'campus';
+      allow create: if isVerified() &&
+        isValidShortId(announcementId) &&
+        isValidAnnouncement(incoming()) &&
+        incoming().id == announcementId &&
+        incoming().authorUid == request.auth.uid &&
+        incoming().createdAt == request.time &&
+        incoming().updatedAt == request.time &&
+        isPublisher();
+      allow update: if isVerified() &&
+        isValidShortId(announcementId) &&
+        isValidAnnouncement(incoming()) &&
+        incoming().id == existing().id &&
+        incoming().authorUid == existing().authorUid &&
+        incoming().createdAt == existing().createdAt &&
+        incoming().updatedAt == request.time &&
+        (
+          isAdmin() ||
+          (
+            existing().authorUid == request.auth.uid &&
+            incoming().diff(existing()).affectedKeys().hasOnly([
+              'title', 'summary', 'category', 'pinned', 'updatedAt'
+            ])
+          )
+        );
+      allow delete: if isVerified() && isValidShortId(announcementId) && isAdmin();
+    }
+  }
+}

@@ -1,0 +1,13 @@
+<?xml version='1.0' encoding='utf-8'?>
+<resources>
+    <string name="app_name">CollegeConnect</string>
+    <string name="title_activity_main">CollegeConnect</string>
+    <string name="package_name">com.collegeconnect.app</string>
+    <string name="custom_url_scheme">com.collegeconnect.app</string>
+    <string name="default_web_client_id" translatable="false">1041874643947-v2ljn8b2n48pul3dpontdo9n496d98sg.apps.googleusercontent.com</string>
+    <string name="google_api_key" translatable="false">AIzaSyBN21UFBvvU5wICkd8_e_saB0zRELz4GfM</string>
+    <string name="google_app_id" translatable="false">1:1041874643947:web:d9f46382d545d4975407ae</string>
+    <string name="gcm_defaultSenderId" translatable="false">1041874643947</string>
+    <string name="google_storage_bucket" translatable="false">infra-cooler-f5v9p.firebasestorage.app</string>
+    <string name="project_id" translatable="false">infra-cooler-f5v9p</string>
+</resources>

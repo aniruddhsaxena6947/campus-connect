@@ -1,0 +1,800 @@
+{
+  "entities": {
+    "UserPublicProfile": {
+      "title": "UserPublicProfile",
+      "description": "Publicly non-PII campus identity and governance role stored under users/{userId}/public/profile.",
+      "type": "object",
+      "properties": {
+        "uid": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128,
+          "pattern": "^[a-zA-Z0-9_\\-]+$",
+          "description": "Firebase Auth UID matching the parent user document ID."
+        },
+        "name": {
+          "type": "string",
+          "minLength": 2,
+          "maxLength": 80,
+          "description": "Display name shown across campus feeds and organizer headers."
+        },
+        "program": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 60,
+          "description": "Academic program or department."
+        },
+        "year": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 40,
+          "description": "Academic year or official faculty/coordinator title."
+        },
+        "role": {
+          "type": "string",
+          "enum": ["student", "faculty", "club_incharge", "hub_incharge", "super_admin"],
+          "description": "RBAC role; self-registered users are locked to student unless claimed via a verified RoleInvite or updated by an administrator."
+        },
+        "assignedHubId": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 64,
+          "pattern": "^[a-zA-Z0-9_\\-]+$",
+          "description": "Primary hub ID assigned to the user."
+        },
+        "assignedClubId": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 64,
+          "pattern": "^[a-zA-Z0-9_\\-]+$",
+          "description": "Primary club ID assigned to a Club In-charge (or unassigned)."
+        },
+        "createdAt": {
+          "type": "string",
+          "format": "date-time",
+          "description": "Immutable server creation timestamp."
+        },
+        "updatedAt": {
+          "type": "string",
+          "format": "date-time",
+          "description": "Server timestamp of the latest profile update."
+        }
+      },
+      "required": ["uid", "name", "program", "year", "role", "assignedHubId", "createdAt", "updatedAt"]
+    },
+    "UserPrivateInfo": {
+      "title": "UserPrivateInfo",
+      "description": "Isolated PII document containing campus email and student/staff ID under users/{userId}/private/info.",
+      "type": "object",
+      "properties": {
+        "uid": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128,
+          "pattern": "^[a-zA-Z0-9_\\-]+$",
+          "description": "Firebase Auth UID matching the owner."
+        },
+        "email": {
+          "type": "string",
+          "format": "email",
+          "minLength": 3,
+          "maxLength": 160,
+          "description": "Verified university or Google account email address (PII)."
+        },
+        "studentId": {
+          "type": "string",
+          "minLength": 2,
+          "maxLength": 40,
+          "description": "University roll/employee ID card number (PII)."
+        },
+        "createdAt": {
+          "type": "string",
+          "format": "date-time",
+          "description": "Immutable server creation timestamp."
+        },
+        "updatedAt": {
+          "type": "string",
+          "format": "date-time",
+          "description": "Server timestamp of latest update."
+        }
+      },
+      "required": ["uid", "email", "studentId", "createdAt", "updatedAt"]
+    },
+    "AdminRecord": {
+      "title": "AdminRecord",
+      "description": "Server/bootstrapped administrator record marking elevated campus governance privilege.",
+      "type": "object",
+      "properties": {
+        "uid": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128,
+          "pattern": "^[a-zA-Z0-9_\\-]+$"
+        },
+        "grantedByUid": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128,
+          "pattern": "^[a-zA-Z0-9_\\-]+$"
+        },
+        "createdAt": {
+          "type": "string",
+          "format": "date-time"
+        }
+      },
+      "required": ["uid", "createdAt"]
+    },
+    "CampusHub": {
+      "title": "CampusHub",
+      "description": "Official university campus hub grouping clubs and events.",
+      "type": "object",
+      "properties": {
+        "id": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 64,
+          "pattern": "^[a-zA-Z0-9_\\-]+$"
+        },
+        "name": {
+          "type": "string",
+          "minLength": 2,
+          "maxLength": 100
+        },
+        "focus": {
+          "type": "string",
+          "minLength": 4,
+          "maxLength": 240
+        },
+        "inChargeName": {
+          "type": "string",
+          "minLength": 2,
+          "maxLength": 80
+        },
+        "building": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 100
+        },
+        "activeEventsCount": {
+          "type": "integer"
+        },
+        "visibility": {
+          "type": "string",
+          "enum": ["campus"]
+        },
+        "createdAt": {
+          "type": "string",
+          "format": "date-time"
+        },
+        "updatedAt": {
+          "type": "string",
+          "format": "date-time"
+        }
+      },
+      "required": ["id", "name", "focus", "inChargeName", "building", "activeEventsCount", "visibility", "createdAt", "updatedAt"]
+    },
+    "CampusClub": {
+      "title": "CampusClub",
+      "description": "Student society or club operating under an approved CampusHub.",
+      "type": "object",
+      "properties": {
+        "id": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 64,
+          "pattern": "^[a-zA-Z0-9_\\-]+$"
+        },
+        "name": {
+          "type": "string",
+          "minLength": 2,
+          "maxLength": 100
+        },
+        "hubId": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 64,
+          "pattern": "^[a-zA-Z0-9_\\-]+$"
+        },
+        "hubName": {
+          "type": "string",
+          "minLength": 2,
+          "maxLength": 100
+        },
+        "tagline": {
+          "type": "string",
+          "minLength": 4,
+          "maxLength": 240
+        },
+        "meetingSchedule": {
+          "type": "string",
+          "minLength": 2,
+          "maxLength": 80
+        },
+        "location": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 100
+        },
+        "memberCount": {
+          "type": "integer"
+        },
+        "leadName": {
+          "type": "string",
+          "minLength": 2,
+          "maxLength": 80
+        },
+        "visibility": {
+          "type": "string",
+          "enum": ["campus"]
+        },
+        "createdAt": {
+          "type": "string",
+          "format": "date-time"
+        },
+        "updatedAt": {
+          "type": "string",
+          "format": "date-time"
+        }
+      },
+      "required": ["id", "name", "hubId", "hubName", "tagline", "meetingSchedule", "location", "memberCount", "leadName", "visibility", "createdAt", "updatedAt"]
+    },
+    "CampusEvent": {
+      "title": "CampusEvent",
+      "description": "University event published by faculty, hub coordinators, or admins with approval workflow.",
+      "type": "object",
+      "properties": {
+        "id": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 64,
+          "pattern": "^[a-zA-Z0-9_\\-]+$"
+        },
+        "title": {
+          "type": "string",
+          "minLength": 3,
+          "maxLength": 120
+        },
+        "category": {
+          "type": "string",
+          "enum": ["Cultural", "Tech", "Sports", "Workshop", "Competition", "Social"]
+        },
+        "date": {
+          "type": "string",
+          "minLength": 10,
+          "maxLength": 10,
+          "pattern": "^\\d{4}-\\d{2}-\\d{2}$"
+        },
+        "dateDisplay": {
+          "type": "string",
+          "minLength": 4,
+          "maxLength": 32
+        },
+        "time": {
+          "type": "string",
+          "minLength": 2,
+          "maxLength": 32
+        },
+        "venue": {
+          "type": "string",
+          "minLength": 2,
+          "maxLength": 100
+        },
+        "entryLabel": {
+          "type": "string",
+          "minLength": 2,
+          "maxLength": 40
+        },
+        "isFree": {
+          "type": "boolean"
+        },
+        "description": {
+          "type": "string",
+          "minLength": 8,
+          "maxLength": 1200
+        },
+        "highlights": {
+          "type": "array",
+          "description": "Bounded highlight tags (1 to 6 short labels)."
+        },
+        "hubId": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 64,
+          "pattern": "^[a-zA-Z0-9_\\-]+$"
+        },
+        "hubName": {
+          "type": "string",
+          "minLength": 2,
+          "maxLength": 100
+        },
+        "organizerName": {
+          "type": "string",
+          "minLength": 2,
+          "maxLength": 80
+        },
+        "authorUid": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128,
+          "pattern": "^[a-zA-Z0-9_\\-]+$"
+        },
+        "authorRole": {
+          "type": "string",
+          "enum": ["student", "faculty", "club_incharge", "hub_incharge", "super_admin"]
+        },
+        "status": {
+          "type": "string",
+          "enum": ["approved", "pending"]
+        },
+        "artwork": {
+          "type": "string",
+          "enum": ["music_fest", "open_mic", "photography", "business_plan", "blood_camp", "hackathon", "campus_general"]
+        },
+        "featured": {
+          "type": "boolean"
+        },
+        "noteTag": {
+          "type": "string",
+          "maxLength": 40
+        },
+        "attendeeCount": {
+          "type": "integer"
+        },
+        "capacity": {
+          "type": "integer"
+        },
+        "createdAt": {
+          "type": "string",
+          "format": "date-time"
+        },
+        "updatedAt": {
+          "type": "string",
+          "format": "date-time"
+        }
+      },
+      "required": [
+        "id",
+        "title",
+        "category",
+        "date",
+        "dateDisplay",
+        "time",
+        "venue",
+        "entryLabel",
+        "isFree",
+        "description",
+        "highlights",
+        "hubId",
+        "hubName",
+        "organizerName",
+        "authorUid",
+        "authorRole",
+        "status",
+        "artwork",
+        "attendeeCount",
+        "capacity",
+        "createdAt",
+        "updatedAt"
+      ]
+    },
+    "OfficialAnnouncement": {
+      "title": "OfficialAnnouncement",
+      "description": "University notice issued by authorized faculty, hub coordinators, or administrators.",
+      "type": "object",
+      "properties": {
+        "id": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 64,
+          "pattern": "^[a-zA-Z0-9_\\-]+$"
+        },
+        "title": {
+          "type": "string",
+          "minLength": 3,
+          "maxLength": 140
+        },
+        "category": {
+          "type": "string",
+          "enum": ["Academic", "Exam", "Hostel", "General"]
+        },
+        "issuerTitle": {
+          "type": "string",
+          "minLength": 2,
+          "maxLength": 120
+        },
+        "authorUid": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128,
+          "pattern": "^[a-zA-Z0-9_\\-]+$"
+        },
+        "authorRole": {
+          "type": "string",
+          "enum": ["student", "faculty", "club_incharge", "hub_incharge", "super_admin"]
+        },
+        "summary": {
+          "type": "string",
+          "minLength": 8,
+          "maxLength": 1200
+        },
+        "postedAt": {
+          "type": "string",
+          "minLength": 2,
+          "maxLength": 32
+        },
+        "date": {
+          "type": "string",
+          "minLength": 10,
+          "maxLength": 10,
+          "pattern": "^\\d{4}-\\d{2}-\\d{2}$"
+        },
+        "pinned": {
+          "type": "boolean"
+        },
+        "visibility": {
+          "type": "string",
+          "enum": ["campus"]
+        },
+        "createdAt": {
+          "type": "string",
+          "format": "date-time"
+        },
+        "updatedAt": {
+          "type": "string",
+          "format": "date-time"
+        }
+      },
+      "required": [
+        "id",
+        "title",
+        "category",
+        "issuerTitle",
+        "authorUid",
+        "authorRole",
+        "summary",
+        "postedAt",
+        "date",
+        "pinned",
+        "visibility",
+        "createdAt",
+        "updatedAt"
+      ]
+    },
+    "UserEventRegistration": {
+      "title": "UserEventRegistration",
+      "description": "Per-user registration pass referencing an approved CampusEvent.",
+      "type": "object",
+      "properties": {
+        "userId": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128,
+          "pattern": "^[a-zA-Z0-9_\\-]+$"
+        },
+        "eventId": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 64,
+          "pattern": "^[a-zA-Z0-9_\\-]+$"
+        },
+        "createdAt": {
+          "type": "string",
+          "format": "date-time"
+        }
+      },
+      "required": ["userId", "eventId", "createdAt"]
+    },
+    "UserSavedRef": {
+      "title": "UserSavedRef",
+      "description": "Per-user bookmark reference for an event or announcement.",
+      "type": "object",
+      "properties": {
+        "userId": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128,
+          "pattern": "^[a-zA-Z0-9_\\-]+$"
+        },
+        "targetId": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 64,
+          "pattern": "^[a-zA-Z0-9_\\-]+$"
+        },
+        "createdAt": {
+          "type": "string",
+          "format": "date-time"
+        }
+      },
+      "required": ["userId", "targetId", "createdAt"]
+    },
+    "UserClubMembership": {
+      "title": "UserClubMembership",
+      "description": "Per-user club membership document paired atomically with CampusClub memberCount.",
+      "type": "object",
+      "properties": {
+        "userId": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128,
+          "pattern": "^[a-zA-Z0-9_\\-]+$"
+        },
+        "clubId": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 64,
+          "pattern": "^[a-zA-Z0-9_\\-]+$"
+        },
+        "createdAt": {
+          "type": "string",
+          "format": "date-time"
+        }
+      },
+      "required": ["userId", "clubId", "createdAt"]
+    },
+    "UserNotification": {
+      "title": "UserNotification",
+      "description": "User-scoped notification alert for events, notices, approvals, and club updates.",
+      "type": "object",
+      "properties": {
+        "id": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 64,
+          "pattern": "^[a-zA-Z0-9_\\-]+$"
+        },
+        "userId": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128,
+          "pattern": "^[a-zA-Z0-9_\\-]+$"
+        },
+        "type": {
+          "type": "string",
+          "enum": ["reminder", "announcement", "club", "approved", "new_event"]
+        },
+        "title": {
+          "type": "string",
+          "minLength": 2,
+          "maxLength": 100
+        },
+        "message": {
+          "type": "string",
+          "minLength": 2,
+          "maxLength": 240
+        },
+        "timeAgo": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 32
+        },
+        "isRead": {
+          "type": "boolean"
+        },
+        "targetScreen": {
+          "type": "string",
+          "enum": ["home", "explore", "event_detail", "hubs", "announcements", "calendar", "saved", "notifications", "profile", "settings", "role_management"]
+        },
+        "targetId": {
+          "type": "string",
+          "maxLength": 64
+        },
+        "createdAt": {
+          "type": "string",
+          "format": "date-time"
+        },
+        "updatedAt": {
+          "type": "string",
+          "format": "date-time"
+        }
+      },
+      "required": ["id", "userId", "type", "title", "message", "timeAgo", "isRead", "targetScreen", "createdAt", "updatedAt"]
+    },
+    "UserDirectoryEntry": {
+      "title": "UserDirectoryEntry",
+      "description": "Admin-managed campus account directory entry syncing identity, role, and hub/club assignment.",
+      "type": "object",
+      "properties": {
+        "uid": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128,
+          "pattern": "^[a-zA-Z0-9_\\-]+$"
+        },
+        "name": {
+          "type": "string",
+          "minLength": 2,
+          "maxLength": 80
+        },
+        "email": {
+          "type": "string",
+          "format": "email",
+          "minLength": 3,
+          "maxLength": 160
+        },
+        "studentId": {
+          "type": "string",
+          "minLength": 2,
+          "maxLength": 40
+        },
+        "program": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 60
+        },
+        "year": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 40
+        },
+        "role": {
+          "type": "string",
+          "enum": ["student", "faculty", "club_incharge", "hub_incharge", "super_admin"]
+        },
+        "assignedHubId": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 64,
+          "pattern": "^[a-zA-Z0-9_\\-]+$"
+        },
+        "assignedClubId": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 64,
+          "pattern": "^[a-zA-Z0-9_\\-]+$"
+        },
+        "createdAt": {
+          "type": "string",
+          "format": "date-time"
+        },
+        "updatedAt": {
+          "type": "string",
+          "format": "date-time"
+        }
+      },
+      "required": ["uid", "name", "email", "studentId", "program", "year", "role", "assignedHubId", "assignedClubId", "createdAt", "updatedAt"]
+    },
+    "EmailDirectoryEntry": {
+      "title": "EmailDirectoryEntry",
+      "description": "SHA-256 email hash to UID lookup entry readable only by administrators.",
+      "type": "object",
+      "properties": {
+        "uid": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128,
+          "pattern": "^[a-zA-Z0-9_\\-]+$"
+        },
+        "createdAt": {
+          "type": "string",
+          "format": "date-time"
+        },
+        "updatedAt": {
+          "type": "string",
+          "format": "date-time"
+        }
+      },
+      "required": ["uid", "createdAt", "updatedAt"]
+    },
+    "RoleInvite": {
+      "title": "RoleInvite",
+      "description": "Super-admin pre-assignment mapping a verified email hash to an assigned role and hub/club scope.",
+      "type": "object",
+      "properties": {
+        "id": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128,
+          "pattern": "^[a-zA-Z0-9_\\-]+$"
+        },
+        "email": {
+          "type": "string",
+          "format": "email",
+          "minLength": 3,
+          "maxLength": 160
+        },
+        "role": {
+          "type": "string",
+          "enum": ["student", "faculty", "club_incharge", "hub_incharge", "super_admin"]
+        },
+        "assignedHubId": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 64,
+          "pattern": "^[a-zA-Z0-9_\\-]+$"
+        },
+        "assignedClubId": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 64,
+          "pattern": "^[a-zA-Z0-9_\\-]+$"
+        },
+        "note": {
+          "type": "string",
+          "maxLength": 120
+        },
+        "invitedByUid": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128,
+          "pattern": "^[a-zA-Z0-9_\\-]+$"
+        },
+        "createdAt": {
+          "type": "string",
+          "format": "date-time"
+        },
+        "updatedAt": {
+          "type": "string",
+          "format": "date-time"
+        }
+      },
+      "required": ["id", "email", "role", "assignedHubId", "assignedClubId", "note", "invitedByUid", "createdAt", "updatedAt"]
+    }
+  },
+  "firestore": {
+    "/users/{userId}/public/profile": {
+      "schema": { "$ref": "#/entities/UserPublicProfile" },
+      "description": "Publicly scoped campus profile without PII."
+    },
+    "/users/{userId}/private/info": {
+      "schema": { "$ref": "#/entities/UserPrivateInfo" },
+      "description": "Strictly owner/admin-only PII record containing email and university ID."
+    },
+    "/admins/{userId}": {
+      "schema": { "$ref": "#/entities/AdminRecord" },
+      "description": "Administrator privilege lookup documents."
+    },
+    "/userDirectory/{userId}": {
+      "schema": { "$ref": "#/entities/UserDirectoryEntry" },
+      "description": "Owner/admin-only campus account directory for in-app role management."
+    },
+    "/emailDirectory/{emailHash}": {
+      "schema": { "$ref": "#/entities/EmailDirectoryEntry" },
+      "description": "Admin-only email SHA-256 hash to UID lookup index."
+    },
+    "/roleInvites/{inviteId}": {
+      "schema": { "$ref": "#/entities/RoleInvite" },
+      "description": "Super-admin pre-assigned role invitations claimed atomically on verified sign-in."
+    },
+    "/hubs/{hubId}": {
+      "schema": { "$ref": "#/entities/CampusHub" },
+      "description": "Campus hubs shared across students, faculty, and coordinators."
+    },
+    "/clubs/{clubId}": {
+      "schema": { "$ref": "#/entities/CampusClub" },
+      "description": "Student clubs belonging to CampusHubs."
+    },
+    "/events/{eventId}": {
+      "schema": { "$ref": "#/entities/CampusEvent" },
+      "description": "Campus events with approval status and attendee counts."
+    },
+    "/announcements/{announcementId}": {
+      "schema": { "$ref": "#/entities/OfficialAnnouncement" },
+      "description": "Official university announcements."
+    },
+    "/users/{userId}/registrations/{eventId}": {
+      "schema": { "$ref": "#/entities/UserEventRegistration" },
+      "description": "User-owned event registrations synced atomically with events attendeeCount."
+    },
+    "/users/{userId}/savedEvents/{eventId}": {
+      "schema": { "$ref": "#/entities/UserSavedRef" },
+      "description": "User-owned saved event bookmarks."
+    },
+    "/users/{userId}/savedAnnouncements/{announcementId}": {
+      "schema": { "$ref": "#/entities/UserSavedRef" },
+      "description": "User-owned saved announcement bookmarks."
+    },
+    "/users/{userId}/readAnnouncements/{announcementId}": {
+      "schema": { "$ref": "#/entities/UserSavedRef" },
+      "description": "User-owned announcement read receipts."
+    },
+    "/users/{userId}/clubMemberships/{clubId}": {
+      "schema": { "$ref": "#/entities/UserClubMembership" },
+      "description": "User-owned club memberships synced atomically with clubs memberCount."
+    },
+    "/users/{userId}/notifications/{notificationId}": {
+      "schema": { "$ref": "#/entities/UserNotification" },
+      "description": "User-owned notifications and read state."
+    }
+  }
+}

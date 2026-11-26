@@ -1,0 +1,8 @@
+{
+  "name": "Remix CollegeConnect",
+  "description": "University campus companion prototype for events, official announcements, hubs, clubs, registrations, and notifications with OLED dark mode and React Native/Expo handoff.",
+  "requestFramePermissions": [],
+  "majorCapabilities": [
+    "MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"
+  ]
+}

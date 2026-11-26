@@ -1,0 +1,48 @@
+{
+  "name": "collegeconnect-v1",
+  "private": true,
+  "version": "1.0.0",
+  "type": "module",
+  "scripts": {
+    "dev": "tsx server.ts",
+    "start": "node server.ts",
+    "build": "vite build",
+    "preview": "vite preview",
+    "clean": "rm -rf dist",
+    "lint": "tsc --noEmit && eslint .",
+    "format:check": "prettier --check \"src/**/*.{ts,tsx}\"",
+    "test": "bun test"
+  },
+  "dependencies": {
+    "@capacitor-firebase/authentication": "^8.6.0",
+    "@capacitor/android": "^8.6.2",
+    "@capacitor/cli": "^8.6.2",
+    "@capacitor/core": "^8.6.2",
+    "@firebase/eslint-plugin-security-rules": "^0.0.2",
+    "@google/genai": "^3.6.1",
+    "@supabase/supabase-js": "^2.119.2",
+    "@types/express": "^5.0.6",
+    "@vitejs/plugin-react": "^6.1.1",
+    "express": "^5.3.0",
+    "firebase": "^13.4.0",
+    "jose": "^6.2.18",
+    "react": "^19.0.1",
+    "react-dom": "^19.0.1",
+    "react-native-svg": "^15.16.1",
+    "react-native-web": "^0.21.4",
+    "tsx": "^4.23.15",
+    "vite": "^8.3.0"
+  },
+  "devDependencies": {
+    "@eslint/js": "^10.0.1",
+    "@types/node": "^22.14.0",
+    "@types/react": "^19.3.0",
+    "@types/react-dom": "^19.3.0",
+    "esbuild": "^0.25.0",
+    "eslint": "^10.15.0",
+    "eslint-plugin-react-hooks": "^7.1.1",
+    "prettier": "^3.10.1",
+    "typescript": "^5.8.3",
+    "typescript-eslint": "^8.73.0"
+  }
+}

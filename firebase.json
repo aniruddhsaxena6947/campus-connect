@@ -1,0 +1,19 @@
+{
+  "auth": {
+    "providers": {
+      "emailPassword": true,
+      "googleSignIn": {
+        "oAuthBrandDisplayName": "CollegeConnect",
+        "supportEmail": "aniruddhsaxena73@gmail.com",
+        "authorizedRedirectUris": [
+          "https://infra-cooler-f5v9p.firebaseapp.com/__/auth/handler",
+          "http://localhost"
+        ]
+      }
+    }
+  },
+  "firestore": {
+    "database": "ai-studio-remixcollegeconn-3a26ef18-2227-4908-bcc2-7cd7c5a116a6",
+    "rules": "firestore.rules"
+  }
+}

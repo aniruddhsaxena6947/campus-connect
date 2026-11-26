@@ -1,0 +1,76 @@
+{
+  "project_info": {
+    "project_number": "1041874643947",
+    "project_id": "infra-cooler-f5v9p",
+    "storage_bucket": "infra-cooler-f5v9p.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:1041874643947:android:5bb86c0d2071671f5407ae",
+        "android_client_info": {
+          "package_name": "com.college.connect"
+        }
+      },
+      "oauth_client": [
+        {
+          "client_id": "1041874643947-v2ljn8b2n48pul3dpontdo9n496d98sg.apps.googleusercontent.com",
+          "client_type": 3
+        }
+      ],
+      "api_key": [
+        {
+          "current_key": "AIzaSyDpDGO0AWqlYLRKixnw60ua48KE0-Ipm4g"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": [
+            {
+              "client_id": "1041874643947-v2ljn8b2n48pul3dpontdo9n496d98sg.apps.googleusercontent.com",
+              "client_type": 3
+            }
+          ]
+        }
+      }
+    },
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:1041874643947:android:8726f2b8f27106ae5407ae",
+        "android_client_info": {
+          "package_name": "com.collegeconnect.app"
+        }
+      },
+      "oauth_client": [
+        {
+          "client_id": "1041874643947-cnp3pfc1a0455kstcatsmsob5lipb5ln.apps.googleusercontent.com",
+          "client_type": 1,
+          "android_info": {
+            "package_name": "com.collegeconnect.app",
+            "certificate_hash": "0a97b5997819c75e0910f9c558eb3288214ea93e"
+          }
+        },
+        {
+          "client_id": "1041874643947-v2ljn8b2n48pul3dpontdo9n496d98sg.apps.googleusercontent.com",
+          "client_type": 3
+        }
+      ],
+      "api_key": [
+        {
+          "current_key": "AIzaSyDpDGO0AWqlYLRKixnw60ua48KE0-Ipm4g"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": [
+            {
+              "client_id": "1041874643947-v2ljn8b2n48pul3dpontdo9n496d98sg.apps.googleusercontent.com",
+              "client_type": 3
+            }
+          ]
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}
