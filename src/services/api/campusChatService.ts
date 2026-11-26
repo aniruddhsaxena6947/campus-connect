@@ -1,5 +1,5 @@
 import type { CampusChatMessage } from '../../types/collegeConnect';
-import { auth } from '../firebase/firebaseApp';
+import { requestCampusApi } from './campusApiClient';
 
 export interface CampusChatApiResponse {
   reply: string;
@@ -7,59 +7,26 @@ export interface CampusChatApiResponse {
   followUpSuggestions: string[];
 }
 
-const API_BASE_URL = (import.meta.env.VITE_API_BASE_URL ?? '').replace(/\/+$/, '');
-
 export async function sendCampusChatMessages(
   messages: Array<Pick<CampusChatMessage, 'role' | 'text'>>
 ): Promise<CampusChatApiResponse> {
-  const headers: Record<string, string> = {
-    'Content-Type': 'application/json',
-  };
-
-  const currentUser = auth.currentUser;
-  if (currentUser) {
-    try {
-      const token = await currentUser.getIdToken();
-      if (token) {
-        headers.Authorization = `Bearer ${token}`;
-      }
-    } catch {
-      // Proceed without token if unavailable
-    }
-  }
-
-  const res = await fetch(`${API_BASE_URL}/api/campus/chat`, {
+  const parsed = await requestCampusApi<Record<string, unknown>>('/api/campus/chat', {
     method: 'POST',
-    headers,
-    body: JSON.stringify({
+    body: {
       messages: messages.map((m) => ({
         role: m.role,
         text: m.text,
       })),
-    }),
+    },
+    errorLabel: 'Campus AI request failed',
   });
 
-  const text = await res.text();
-  let parsed: Record<string, unknown> | null;
-  try {
-    parsed = text ? (JSON.parse(text) as Record<string, unknown>) : null;
-  } catch {
-    parsed = null;
-  }
-
-  if (!res.ok) {
-    const errorMsg =
-      (parsed && typeof parsed.error === 'string' ? parsed.error : null) ||
-      `Campus AI request failed (${res.status})`;
-    throw new Error(errorMsg);
-  }
-
   return {
-    reply: typeof parsed?.reply === 'string' ? parsed.reply : '',
-    matchedEventIds: Array.isArray(parsed?.matchedEventIds)
+    reply: typeof parsed.reply === 'string' ? parsed.reply : '',
+    matchedEventIds: Array.isArray(parsed.matchedEventIds)
       ? parsed.matchedEventIds.filter((id): id is string => typeof id === 'string')
       : [],
-    followUpSuggestions: Array.isArray(parsed?.followUpSuggestions)
+    followUpSuggestions: Array.isArray(parsed.followUpSuggestions)
       ? parsed.followUpSuggestions.filter((s): s is string => typeof s === 'string')
       : [],
   };

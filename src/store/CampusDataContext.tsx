@@ -112,6 +112,7 @@ interface CampusDataContextValue {
   unreadNotificationsCount: number;
   isSupabaseSynced: boolean;
   isFirestoreSynced: boolean;
+  refreshCampusData: () => Promise<void>;
   toggleEventRegistration: (eventId: string) => void;
   toggleEventSaved: (eventId: string) => void;
   toggleAnnouncementSaved: (announcementId: string) => void;
@@ -162,6 +163,7 @@ export const CampusDataProvider: React.FC<{
   const [liveNotifications, setLiveNotifications] = useState<AppNotification[] | null>(null);
 
   const refreshRef = useRef<(() => Promise<void>) | null>(null);
+  const syncWarningShownRef = useRef(false);
 
   const [prevFirebaseUid, setPrevFirebaseUid] = useState<string | null>(firebaseUid);
   if (firebaseUid !== prevFirebaseUid) {
@@ -181,6 +183,7 @@ export const CampusDataProvider: React.FC<{
 
     const sub = subscribeSupabaseCampusCatalog(
       (payload: CampusCatalogPayload) => {
+        syncWarningShownRef.current = false;
         const ready = Boolean(payload.configured && payload.schemaReady);
         setSupabaseReady(ready);
         if (!ready) {
@@ -204,6 +207,14 @@ export const CampusDataProvider: React.FC<{
       },
       (err) => {
         console.warn('Supabase campus sync warning:', err.message);
+        if (!syncWarningShownRef.current) {
+          syncWarningShownRef.current = true;
+          showFeedback(
+            'info',
+            'Connecting to Campus Server',
+            `Live sync will retry automatically (${err.message}).`
+          );
+        }
       }
     );
 
@@ -212,7 +223,11 @@ export const CampusDataProvider: React.FC<{
       refreshRef.current = null;
       sub.unsubscribe();
     };
-  }, [firebaseAuthReady, firebaseUid]);
+  }, [firebaseAuthReady, firebaseUid, showFeedback]);
+
+  const refreshCampusData = useCallback(async () => {
+    await refreshRef.current?.();
+  }, []);
 
   const isSupabaseCatalogActive = Boolean(supabaseReady && liveEvents !== null);
   const isUserSupabaseSynced = Boolean(firebaseUid && isSupabaseCatalogActive);
@@ -312,7 +327,7 @@ export const CampusDataProvider: React.FC<{
       if (!target) return;
       const nextRegistered = !target.isRegistered;
 
-      if (dataRef.current.isUserSupabaseSynced) {
+      if (dataRef.current.firebaseUid) {
         setLiveRegIds((prev) => {
           const next = new Set(prev);
           if (nextRegistered) next.add(eventId);
@@ -368,7 +383,7 @@ export const CampusDataProvider: React.FC<{
       if (!target) return;
       const nextSaved = !target.isSaved;
 
-      if (dataRef.current.isUserSupabaseSynced) {
+      if (dataRef.current.firebaseUid) {
         setLiveSavedEventIds((prev) => {
           const next = new Set(prev);
           if (nextSaved) next.add(eventId);
@@ -397,7 +412,7 @@ export const CampusDataProvider: React.FC<{
       if (!target) return;
       const nextSaved = !target.isSaved;
 
-      if (dataRef.current.isUserSupabaseSynced) {
+      if (dataRef.current.firebaseUid) {
         setLiveSavedAnnIds((prev) => {
           const next = new Set(prev);
           if (nextSaved) next.add(announcementId);
@@ -420,7 +435,7 @@ export const CampusDataProvider: React.FC<{
 
   const markAnnouncementRead = useCallback(
     (announcementId: string) => {
-      if (dataRef.current.isUserSupabaseSynced) {
+      if (dataRef.current.firebaseUid) {
         setLiveReadAnnIds((prev) => {
           if (prev.has(announcementId)) return prev;
           const next = new Set(prev);
@@ -445,7 +460,7 @@ export const CampusDataProvider: React.FC<{
       if (!target) return;
       const nextJoined = !target.isJoined;
 
-      if (dataRef.current.isUserSupabaseSynced) {
+      if (dataRef.current.firebaseUid) {
         setLiveClubIds((prev) => {
           const next = new Set(prev);
           if (nextJoined) next.add(clubId);
@@ -491,7 +506,7 @@ export const CampusDataProvider: React.FC<{
 
   const markNotificationRead = useCallback(
     (notificationId: string) => {
-      if (dataRef.current.isUserSupabaseSynced) {
+      if (dataRef.current.firebaseUid) {
         const existsInSynced = dataRef.current.notifications.some(
           (n) => n.id === notificationId && !n.isRead
         );
@@ -512,7 +527,7 @@ export const CampusDataProvider: React.FC<{
   );
 
   const markAllNotificationsRead = useCallback(() => {
-    if (dataRef.current.isUserSupabaseSynced) {
+    if (dataRef.current.firebaseUid) {
       const unreadIds = dataRef.current.notifications.filter((n) => !n.isRead).map((n) => n.id);
       if (unreadIds.length === 0) return;
       setLiveNotifications((prev) => (prev ? prev.map((n) => ({ ...n, isRead: true })) : prev));
@@ -527,7 +542,7 @@ export const CampusDataProvider: React.FC<{
 
   const approveEvent = useCallback(
     (eventId: string) => {
-      const { role: curRole, events: curEvents, isUserSupabaseSynced: synced } = dataRef.current;
+      const { role: curRole, events: curEvents, firebaseUid: curUid } = dataRef.current;
       if (!ROLE_PERSONAS[curRole].canApproveSubmissions) return;
       const target = curEvents.find((e) => e.id === eventId);
       if (!target) return;
@@ -543,7 +558,7 @@ export const CampusDataProvider: React.FC<{
         targetId: target.id,
       };
 
-      if (synced) {
+      if (curUid) {
         setLiveEvents((prev) =>
           prev ? prev.map((e) => (e.id === eventId ? { ...e, status: 'approved' } : e)) : prev
         );
@@ -563,11 +578,11 @@ export const CampusDataProvider: React.FC<{
 
   const rejectEvent = useCallback(
     (eventId: string) => {
-      const { role: curRole, events: curEvents, isUserSupabaseSynced: synced } = dataRef.current;
+      const { role: curRole, events: curEvents, firebaseUid: curUid } = dataRef.current;
       if (!ROLE_PERSONAS[curRole].canApproveSubmissions) return;
       const target = curEvents.find((e) => e.id === eventId);
 
-      if (synced) {
+      if (curUid) {
         setLiveEvents((prev) => (prev ? prev.filter((e) => e.id !== eventId) : prev));
         void rejectSupabaseEvent(eventId)
           .then(() => refreshRef.current?.())
@@ -587,7 +602,7 @@ export const CampusDataProvider: React.FC<{
 
   const createHub = useCallback(
     async (input: NewHubInput): Promise<{ ok: boolean; error?: string }> => {
-      const { role: curRole, profile: curProfile, isUserSupabaseSynced: synced } = dataRef.current;
+      const { role: curRole, profile: curProfile, firebaseUid: curUid } = dataRef.current;
       const created = createHubRecord(input, curRole, curProfile);
       if (!created) {
         const msg = 'Only Super Admin can create a campus hub with a valid name and focus.';
@@ -595,7 +610,7 @@ export const CampusDataProvider: React.FC<{
         return { ok: false, error: msg };
       }
 
-      if (synced) {
+      if (curUid) {
         try {
           await createSupabaseHub(created);
           setLiveHubs((prev) => (prev ? [created, ...prev] : [created]));
@@ -623,7 +638,7 @@ export const CampusDataProvider: React.FC<{
         role: curRole,
         profile: curProfile,
         hubs: curHubs,
-        isUserSupabaseSynced: synced,
+        firebaseUid: curUid,
       } = dataRef.current;
       const created = createClubRecord(input, curRole, curProfile, curHubs);
       if (!created) {
@@ -635,7 +650,7 @@ export const CampusDataProvider: React.FC<{
         return { ok: false, error: msg };
       }
 
-      if (synced) {
+      if (curUid) {
         try {
           await createSupabaseClub(created);
           const { isJoined: _ignored, ...clubCatalogRow } = created;
@@ -664,7 +679,7 @@ export const CampusDataProvider: React.FC<{
         role: curRole,
         profile: curProfile,
         hubs: curHubs,
-        isUserSupabaseSynced: synced,
+        firebaseUid: curUid,
       } = dataRef.current;
       if (curHubs.length === 0) {
         const msg = 'Create a Campus Hub first before publishing an event.';
@@ -678,7 +693,7 @@ export const CampusDataProvider: React.FC<{
         return { ok: false, error: msg };
       }
 
-      if (synced) {
+      if (curUid) {
         try {
           await publishSupabaseEvent(created.event, created.notification);
           const { isRegistered: _r, isSaved: _s, ...eventCatalogRow } = created.event;
@@ -715,7 +730,7 @@ export const CampusDataProvider: React.FC<{
 
   const publishAnnouncement = useCallback(
     async (input: NewAnnouncementInput): Promise<{ ok: boolean; error?: string }> => {
-      const { role: curRole, profile: curProfile, isUserSupabaseSynced: synced } = dataRef.current;
+      const { role: curRole, profile: curProfile, firebaseUid: curUid } = dataRef.current;
       const created = createAnnouncementRecord(input, curRole, curProfile);
       if (!created) {
         const msg = 'Your current role is not permitted to publish official notices.';
@@ -723,7 +738,7 @@ export const CampusDataProvider: React.FC<{
         return { ok: false, error: msg };
       }
 
-      if (synced) {
+      if (curUid) {
         try {
           await publishSupabaseAnnouncement(created.announcement, created.notification);
           const { isRead: _r, isSaved: _s, ...annCatalogRow } = created.announcement;
@@ -796,6 +811,7 @@ export const CampusDataProvider: React.FC<{
       unreadNotificationsCount,
       isSupabaseSynced: isUserSupabaseSynced,
       isFirestoreSynced: isUserSupabaseSynced,
+      refreshCampusData,
       toggleEventRegistration,
       toggleEventSaved,
       toggleAnnouncementSaved,
@@ -822,6 +838,7 @@ export const CampusDataProvider: React.FC<{
       mergedNotifications,
       unreadNotificationsCount,
       isUserSupabaseSynced,
+      refreshCampusData,
       toggleEventRegistration,
       toggleEventSaved,
       toggleAnnouncementSaved,

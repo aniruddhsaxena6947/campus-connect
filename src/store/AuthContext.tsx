@@ -81,11 +81,11 @@ export function loadInitialAuthState(): PersistedAuthState {
   const resolvedAccounts = baseAccounts.map((acc) =>
     isBootstrappedAdminEmail(acc.email) && acc.role !== 'super_admin'
       ? {
-          ...acc,
-          role: 'super_admin' as UserRole,
-          program: 'University Administration',
-          year: 'Super Admin',
-        }
+        ...acc,
+        role: 'super_admin' as UserRole,
+        program: 'University Administration',
+        year: 'Super Admin',
+      }
       : acc
   );
   const resolvedRole: UserRole = isBootstrappedAdminEmail(resolvedProfile.email)
@@ -293,8 +293,8 @@ export const AuthProvider: React.FC<{
           ...prev,
           name:
             prev.name &&
-            prev.name !== INITIAL_PROFILE.name &&
-            !Object.values(ROLE_PERSONAS).some((p) => p.defaultName === prev.name)
+              prev.name !== INITIAL_PROFILE.name &&
+              !Object.values(ROLE_PERSONAS).some((p) => p.defaultName === prev.name)
               ? prev.name
               : persona.defaultName,
           program: persona.defaultProgram,
@@ -714,10 +714,10 @@ export const AuthProvider: React.FC<{
 
   const signOut = useCallback(() => {
     if (authRef.current.firebaseUid) {
-      void firebaseSignOut(auth).catch(() => {});
+      void firebaseSignOut(auth).catch(() => { });
     }
     if (Capacitor.isNativePlatform()) {
-      void FirebaseAuthentication.signOut().catch(() => {});
+      void FirebaseAuthentication.signOut().catch(() => { });
     }
     setFirebaseUid(null);
     setFirebaseEmail(null);

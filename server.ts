@@ -97,8 +97,13 @@ function extractBearerToken(req: Request): string | null {
   return token.length > 0 ? token : null;
 }
 
-async function resolveCallerRole(uid: string, email: string, idToken: string): Promise<UserRole> {
-  if (email.trim().toLowerCase() === BOOTSTRAPPED_ADMIN_EMAIL) {
+async function resolveCallerRole(
+  uid: string,
+  email: string,
+  emailVerified: boolean,
+  idToken: string
+): Promise<UserRole> {
+  if (emailVerified && email.trim().toLowerCase() === BOOTSTRAPPED_ADMIN_EMAIL) {
     return 'super_admin';
   }
   if (!firebaseConfig.projectId) {
@@ -146,10 +151,10 @@ async function verifyFirebaseCaller(req: Request): Promise<VerifiedCaller | null
     const uid = typeof payload.sub === 'string' ? payload.sub : '';
     const email = typeof payload.email === 'string' ? payload.email.trim().toLowerCase() : '';
     const emailVerified = payload.email_verified === true;
-    if (!uid || !isValidDocumentId(uid, BLUEPRINT_LIMITS.uidMax) || !emailVerified) {
+    if (!uid || !isValidDocumentId(uid, BLUEPRINT_LIMITS.uidMax)) {
       return null;
     }
-    const role = await resolveCallerRole(uid, email, idToken);
+    const role = await resolveCallerRole(uid, email, emailVerified, idToken);
     return { uid, email, role, idToken };
   } catch {
     return null;

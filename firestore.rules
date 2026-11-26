@@ -361,9 +361,9 @@ service cloud.firestore {
     // Campus User Directory & Email Pre-Assignments (Role Management)
     // -------------------------------------------------------------------------
     match /userDirectory/{userId} {
-      allow get: if isVerified() && isValidId(userId) && (isOwner(userId) || isAdmin());
-      allow list: if isVerified() && (resource.data.uid == request.auth.uid || isBootstrappedAdmin());
-      allow create: if isVerified() &&
+      allow get: if isSignedIn() && isValidId(userId) && (isOwner(userId) || isAdmin());
+      allow list: if isSignedIn() && (resource.data.uid == request.auth.uid || isBootstrappedAdmin());
+      allow create: if isSignedIn() &&
         isValidId(userId) &&
         isValidUserDirectoryEntry(incoming()) &&
         incoming().uid == userId &&
@@ -375,11 +375,11 @@ service cloud.firestore {
             isOwner(userId) &&
             (
               incoming().role == 'student' ||
-              hasMatchingRoleInvite(incoming().role, incoming().assignedHubId, incoming().assignedClubId)
+              (isVerified() && hasMatchingRoleInvite(incoming().role, incoming().assignedHubId, incoming().assignedClubId))
             )
           )
         );
-      allow update: if isVerified() &&
+      allow update: if isSignedIn() &&
         isValidId(userId) &&
         isValidUserDirectoryEntry(incoming()) &&
         incoming().uid == existing().uid &&
@@ -396,6 +396,7 @@ service cloud.firestore {
             ])
           ) ||
           (
+            isVerified() &&
             isOwner(userId) &&
             hasMatchingRoleInvite(incoming().role, incoming().assignedHubId, incoming().assignedClubId) &&
             incoming().diff(existing()).affectedKeys().hasOnly([
@@ -407,15 +408,15 @@ service cloud.firestore {
     }
 
     match /emailDirectory/{emailHash} {
-      allow get: if isVerified() && isValidId(emailHash) && (isAdmin() || emailHash == callerEmailInviteId());
+      allow get: if isSignedIn() && isValidId(emailHash) && (isAdmin() || emailHash == callerEmailInviteId());
       allow list: if false;
-      allow create: if isVerified() &&
+      allow create: if isSignedIn() &&
         isValidId(emailHash) &&
         isValidEmailDirectoryEntry(incoming()) &&
         (incoming().uid == request.auth.uid || isAdmin()) &&
         incoming().createdAt == request.time &&
         incoming().updatedAt == request.time;
-      allow update: if isVerified() &&
+      allow update: if isSignedIn() &&
         isValidId(emailHash) &&
         isValidEmailDirectoryEntry(incoming()) &&
         incoming().uid == existing().uid &&
@@ -470,9 +471,9 @@ service cloud.firestore {
       allow get, list, create, update, delete: if false;
 
       match /public/profile {
-        allow get: if isVerified() && isValidId(userId) && (isOwner(userId) || isAdmin());
+        allow get: if isSignedIn() && isValidId(userId) && (isOwner(userId) || isAdmin());
         allow list: if false;
-        allow create: if isVerified() &&
+        allow create: if isSignedIn() &&
           isValidId(userId) &&
           isValidPublicProfile(incoming()) &&
           incoming().uid == userId &&
@@ -485,13 +486,14 @@ service cloud.firestore {
               (
                 incoming().role == 'student' ||
                 (
+                  isVerified() &&
                   ('assignedClubId' in incoming()) &&
                   hasMatchingRoleInvite(incoming().role, incoming().assignedHubId, incoming().assignedClubId)
                 )
               )
             )
           );
-        allow update: if isVerified() &&
+        allow update: if isSignedIn() &&
           isValidId(userId) &&
           isValidPublicProfile(incoming()) &&
           incoming().uid == existing().uid &&
@@ -507,6 +509,7 @@ service cloud.firestore {
               ])
             ) ||
             (
+              isVerified() &&
               isOwner(userId) &&
               ('assignedClubId' in incoming()) &&
               hasMatchingRoleInvite(incoming().role, incoming().assignedHubId, incoming().assignedClubId) &&
@@ -519,16 +522,16 @@ service cloud.firestore {
       }
 
       match /private/info {
-        allow get: if isVerified() && isValidId(userId) && (isOwner(userId) || isAdmin());
+        allow get: if isSignedIn() && isValidId(userId) && (isOwner(userId) || isAdmin());
         allow list: if false;
-        allow create: if isVerified() &&
+        allow create: if isSignedIn() &&
           isValidId(userId) &&
           isOwner(userId) &&
           isValidPrivateInfo(incoming()) &&
           incoming().uid == request.auth.uid &&
           incoming().createdAt == request.time &&
           incoming().updatedAt == request.time;
-        allow update: if isVerified() &&
+        allow update: if isSignedIn() &&
           isValidId(userId) &&
           (isOwner(userId) || isAdmin()) &&
           isValidPrivateInfo(incoming()) &&
